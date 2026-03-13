@@ -231,7 +231,12 @@ def _rule_based_decision(query: str) -> RouterDecision:
         needs_scheduler=any(word in lowered for word in schedule_keywords),
         needs_registry=any(word in lowered for word in registry_keywords),
         needs_telemedicine=any(word in lowered for word in telemedicine_keywords) or "consulta" in lowered,
-        needs_notification=any(word in lowered for word in notification_keywords) or "agendar" in lowered,
+        needs_notification=(
+            any(word in lowered for word in notification_keywords)
+            or "agendar" in lowered
+            or "remarcar" in lowered
+            or "cancel" in lowered
+        ),
         intent=requested_action,
         requested_action=requested_action,
         urgency_level="alta" if "urgente" in lowered else "normal",
