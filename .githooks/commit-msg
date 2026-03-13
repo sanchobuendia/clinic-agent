@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+
+commit_msg_file="$1"
+first_line="$(head -n 1 "$commit_msg_file")"
+
+case "$first_line" in
+  feature:*)
+    exit 0
+    ;;
+  *)
+    echo "A mensagem de commit deve comecar com 'feature:'."
+    echo "Exemplo: feature: adiciona validacao do scheduler"
+    exit 1
+    ;;
+esac
+
