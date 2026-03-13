@@ -54,9 +54,6 @@ async def notification_agent(state: GraphState) -> dict:
                     "",
                     "Resumo da interacao:",
                     *interaction_summary,
-                    "",
-                    "Mensagem original do paciente:",
-                    state["user_query"],
                 ]
             )
             if decision and decision.patient_phone:
