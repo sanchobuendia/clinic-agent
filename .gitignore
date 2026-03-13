@@ -13,3 +13,6 @@ dist/
 build/
 chromadb/
 kb_manifest.json
+credentials.json
+token.json
+.env
