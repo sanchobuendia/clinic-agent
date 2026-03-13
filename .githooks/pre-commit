@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$branch" = "main" ]; then
+  echo "Commit direto na branch 'main' esta bloqueado."
+  echo "Crie uma branch de trabalho e abra um pull request."
+  exit 1
+fi
+

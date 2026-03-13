@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+python_cmd="${PYTHON_FOR_HOOKS:-python3}"
+
+if ! command -v "$python_cmd" >/dev/null 2>&1; then
+  echo "Python nao encontrado para rodar os testes no pre-push."
+  echo "Defina PYTHON_FOR_HOOKS ou instale o Python."
+  exit 1
+fi
+
+echo "Rodando testes antes do push..."
+"$python_cmd" -m pytest -q
+

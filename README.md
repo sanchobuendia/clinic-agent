@@ -198,6 +198,18 @@ SMTP_USE_TLS=true
 /opt/miniconda3/envs/clinic/bin/python -m pip install -r requirements.txt
 ```
 
+### Instalar hooks do Git
+
+```bash
+sh scripts/install_git_hooks.sh
+```
+
+Depois disso:
+
+- commits diretos na `main` ficam bloqueados localmente
+- a mensagem de commit precisa comecar com `feature:`
+- os testes rodam automaticamente antes de cada `push`
+
 ### Subir a API
 
 ```bash
