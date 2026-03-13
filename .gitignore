@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+.env
+.env.local
+.venv/
+venv/
+dist/
+build/
+chromadb/
+kb_manifest.json
