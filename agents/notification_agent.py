@@ -15,9 +15,15 @@ async def notification_agent(state: GraphState) -> dict:
     status = "queued"
 
     if decision and decision.requested_action == "cancelar":
-        preview = "Recebemos o pedido de cancelamento. Aguarde a confirmacao da liberacao do horario."
+        if schedule and schedule.status == "cancelled":
+            preview = "Cancelamento concluido. Enviamos a confirmacao para o paciente."
+        else:
+            preview = "Recebemos o pedido de cancelamento. Aguarde a confirmacao da liberacao do horario."
     elif decision and decision.requested_action == "remarcar":
-        preview = "Estamos verificando novos horarios para remarcacao e retornaremos com opcoes."
+        if schedule and schedule.status == "slot_reserved":
+            preview = "Remarcacao concluida. Enviamos os novos dados ao paciente."
+        else:
+            preview = "Estamos verificando novos horarios para remarcacao e retornaremos com opcoes."
     elif schedule and schedule.status == "slot_reserved":
         patient_name = registry.patient_name if registry and registry.patient_name else "Paciente"
         patient_email = registry.patient_email if registry and registry.patient_email else (

@@ -16,7 +16,9 @@ Ele recebe a mensagem do paciente, entende o contexto da conversa, valida ou cri
 - 🧠 conduz teleorientação dermatológica com apoio de RAG
 - 📚 consulta uma base dermatológica vetorial em ChromaDB
 - 📅 agenda consultas no Google Calendar
+- 🔁 remarca e cancela consultas no Google Calendar
 - 📬 envia e-mail ao paciente com resumo do atendimento e dados do agendamento
+- ⏰ dispara lembretes automáticos (D-1 e D-0) e checagem pós-consulta por e-mail
 - 🧵 persiste histórico e estado da conversa por `thread_id`
 
 ---
@@ -79,12 +81,15 @@ Notification Agent
 - consulta disponibilidade real no Google Calendar
 - cria o evento quando o slot está livre
 - sugere horários alternativos quando necessário
+- remarca consulta existente a partir de CPF + nome
+- cancela consulta existente a partir de CPF + nome
 
 ### 📬 E-mail de confirmação
 
 - envia resumo do atendimento
 - inclui dados do agendamento
 - usa SMTP, incluindo Gmail com senha de app
+- inclui endpoint para disparo de lembretes de consulta e checagem de no-show
 
 ---
 
@@ -216,6 +221,12 @@ curl -X POST http://localhost:8001/query \
   }'
 ```
 
+### Disparo de lembretes
+
+```bash
+curl -X POST http://localhost:8001/appointments/reminders
+```
+
 ---
 
 ## 🔌 Endpoints
@@ -224,6 +235,7 @@ curl -X POST http://localhost:8001/query \
 - `GET /patients`
 - `GET /patients/{cpf}`
 - `POST /query`
+- `POST /appointments/reminders`
 
 ---
 

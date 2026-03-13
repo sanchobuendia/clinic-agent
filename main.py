@@ -1,6 +1,7 @@
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
+import re
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,8 @@ from pydantic import BaseModel, Field
 
 import graph
 from services.patient_registry import PatientRegistryError, get_patient_by_cpf, list_patients
+from services.email_service import EmailServiceError, send_email
+from services.google_calendar import CalendarIntegrationError, GoogleCalendarService
 from state import GraphState
 from utils.logger import get_logger
 
@@ -60,6 +63,12 @@ class PatientResponse(BaseModel):
     sex: str
     email: str
     phone: str
+
+
+class ReminderDispatchResponse(BaseModel):
+    reminders_sent: int
+    no_show_checks_sent: int
+    inspected_events: int
 
 
 def _is_retryable_checkpoint_error(exc: Exception) -> bool:
@@ -200,3 +209,99 @@ async def query_endpoint(payload: QueryRequest):
         raise HTTPException(status_code=400, detail="A query nao pode estar vazia.")
     result = await run_query(payload.query, payload.thread_id)
     return QueryResponse(**result)
+
+
+def _extract_email_from_event(event: dict) -> str | None:
+    description = event.get("description") or ""
+    match = re.search(
+        r"email\s*:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+        description,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    return match.group(1).lower()
+
+
+def _extract_patient_name_from_event(event: dict) -> str:
+    summary = event.get("summary") or "Consulta"
+    if "-" in summary:
+        return summary.split("-", maxsplit=1)[1].strip()
+    return summary
+
+
+@app.post("/appointments/reminders", response_model=ReminderDispatchResponse)
+async def dispatch_appointment_reminders():
+    calendar_service = GoogleCalendarService()
+    if not calendar_service.is_configured():
+        raise HTTPException(status_code=500, detail="Google Calendar nao configurado completamente.")
+
+    try:
+        events = calendar_service.list_upcoming_events(days_ahead=2, max_results=200)
+    except CalendarIntegrationError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    now = datetime.now(calendar_service.timezone)
+    reminders_sent = 0
+    no_show_checks_sent = 0
+
+    for event in events:
+        start_value = event.get("start", {}).get("dateTime")
+        end_value = event.get("end", {}).get("dateTime")
+        if not start_value:
+            continue
+        try:
+            start_dt = datetime.fromisoformat(start_value).astimezone(calendar_service.timezone)
+            end_dt = datetime.fromisoformat(end_value).astimezone(calendar_service.timezone) if end_value else None
+        except ValueError:
+            logger.warning("Evento com formato de data invalido foi ignorado: %s", event.get("id"))
+            continue
+        delta_minutes = int((start_dt - now).total_seconds() / 60)
+
+        patient_email = _extract_email_from_event(event)
+        if not patient_email:
+            continue
+        patient_name = _extract_patient_name_from_event(event)
+
+        try:
+            if 110 <= delta_minutes <= 130:
+                send_email(
+                    to_email=patient_email,
+                    subject="Lembrete: sua consulta e em ~2 horas",
+                    body=(
+                        f"Ola, {patient_name}.\n\n"
+                        f"Este e um lembrete da sua consulta marcada para {start_dt.strftime('%d/%m/%Y %H:%M')}."
+                    ),
+                )
+                reminders_sent += 1
+            elif 23 * 60 + 45 <= delta_minutes <= 24 * 60 + 15:
+                send_email(
+                    to_email=patient_email,
+                    subject="Lembrete: sua consulta e amanha",
+                    body=(
+                        f"Ola, {patient_name}.\n\n"
+                        f"Sua consulta esta confirmada para {start_dt.strftime('%d/%m/%Y %H:%M')}."
+                    ),
+                )
+                reminders_sent += 1
+            elif end_dt and -90 <= int((end_dt - now).total_seconds() / 60) <= -30:
+                send_email(
+                    to_email=patient_email,
+                    subject="Confirmacao de presenca",
+                    body=(
+                        f"Ola, {patient_name}.\n\n"
+                        "Nao identificamos seu check-in automaticamente. "
+                        "Se voce compareceu, desconsidere. Caso contrario, responda para ajudarmos no reagendamento."
+                    ),
+                )
+                no_show_checks_sent += 1
+        except EmailServiceError as exc:
+            logger.warning("Falha ao enviar email de lembrete para %s: %s", patient_email, exc)
+        except Exception as exc:  # pragma: no cover - falhas de rede/SMTP em runtime
+            logger.exception("Erro inesperado ao enviar email de lembrete para %s: %s", patient_email, exc)
+
+    return ReminderDispatchResponse(
+        reminders_sent=reminders_sent,
+        no_show_checks_sent=no_show_checks_sent,
+        inspected_events=len(events),
+    )

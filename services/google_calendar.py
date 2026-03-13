@@ -149,6 +149,71 @@ class GoogleCalendarService:
         }
         return service.events().insert(calendarId=self.calendar_id, body=event).execute()
 
+    def list_upcoming_events(self, days_ahead: int = 30, max_results: int = 50) -> list[dict]:
+        service = self.get_service()
+        now = datetime.now(self.timezone)
+        window_end = now + timedelta(days=days_ahead)
+        response = (
+            service.events()
+            .list(
+                calendarId=self.calendar_id,
+                timeMin=now.isoformat(),
+                timeMax=window_end.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=max_results,
+            )
+            .execute()
+        )
+        return response.get("items", [])
+
+    def find_patient_event(
+        self,
+        patient_cpf: str | None,
+        patient_name: str | None,
+        preferred_text: str | None = None,
+    ) -> dict | None:
+        events = self.list_upcoming_events(days_ahead=90, max_results=100)
+        preferred_start = parse_preferred_datetime(preferred_text, self.timezone) if preferred_text else None
+
+        cpf_digits = re.sub(r"\D", "", patient_cpf or "")
+        name_norm = (patient_name or "").strip().lower()
+
+        for event in events:
+            description = (event.get("description") or "").lower()
+            summary = (event.get("summary") or "").lower()
+            start_value = event.get("start", {}).get("dateTime")
+            event_start = datetime.fromisoformat(start_value).astimezone(self.timezone) if start_value else None
+
+            cpf_match = bool(cpf_digits) and cpf_digits in re.sub(r"\D", "", description)
+            name_match = bool(name_norm) and name_norm in summary
+            datetime_match = preferred_start and event_start and event_start == preferred_start
+
+            if cpf_match and (datetime_match or preferred_start is None):
+                return event
+            if name_match and datetime_match:
+                return event
+
+        for event in events:
+            description = (event.get("description") or "").lower()
+            summary = (event.get("summary") or "").lower()
+            if cpf_digits and cpf_digits in re.sub(r"\D", "", description):
+                return event
+            if name_norm and name_norm in summary:
+                return event
+        return None
+
+    def cancel_event(self, event_id: str) -> None:
+        service = self.get_service()
+        service.events().delete(calendarId=self.calendar_id, eventId=event_id).execute()
+
+    def reschedule_event(self, event_id: str, new_start: datetime, new_end: datetime) -> dict:
+        service = self.get_service()
+        event = service.events().get(calendarId=self.calendar_id, eventId=event_id).execute()
+        event["start"] = {"dateTime": new_start.isoformat(), "timeZone": self.timezone_name}
+        event["end"] = {"dateTime": new_end.isoformat(), "timeZone": self.timezone_name}
+        return service.events().update(calendarId=self.calendar_id, eventId=event_id, body=event).execute()
+
 
 def normalize_preferred_datetime_text(preferred_text: str | None, timezone: ZoneInfo) -> str | None:
     parsed = parse_preferred_datetime(preferred_text, timezone)
